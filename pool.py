@@ -4,7 +4,7 @@ class Pool(object):
 		self.reuse = set()
 	def get(self):
 		try:
-			self.reuse.pop()
+			return self.reuse.pop()
 		except KeyError:
 			self.next += 1
 			return self.next - 1
