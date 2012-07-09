@@ -1,6 +1,7 @@
 import StringIO
 import struct
 
+
 (ir, kr, ar) = (0, 1, 2)
 
 defaults = {'amp': 1, 'attack': 0.001, 'decay': 1, 'freq': 440, 'i': 0, 'o': 0}

@@ -1,26 +1,10 @@
-import collections
-import gc
 import itertools
-import pprint
-import sys
 import time
 
-import pool
-import synthdef
-import scsynth
+from pyon import pool, synthdef, scsynth
 
 
-bundle = scsynth.BundleContext()
-def send(*args):
-	if bundle.depth:
-		bundle.msgs.append(args)
-	else:
-		scsynth.send(*args)
-def sendBundledMsg(*args):
-	with bundle:
-		send(*args)
-
-
+# signal rates for each synthdef
 synthSpec = {
 	'decay': 1,
 	'delta': 1,
@@ -58,11 +42,12 @@ class Synth(object):
 	def __init__(self, synthdef, parent=None, **kwargs):
 		if not parent: parent = default
 		self._id = nodePool.get()
-		if synthSpec.get(synthdef) == 1: # control bus out
+		if synthSpec.get(synthdef) == 1: # control bus output
 			self._obus = KBus()
 			if 'o' not in kwargs:
 				kwargs['o'] = self._obus
 		with bundle:
+			# setattr ALL the kwargs! But combine the sets and maps for efficiency
 			snew = ['/s_new', synthdef, self._id, 0, parent._id]
 			mapping = {}
 			for (name, value) in kwargs.iteritems():
@@ -87,6 +72,11 @@ class Synth(object):
 				sendBundledMsg('/n_map', self._id, name, setter[1])
 
 	def _set(self, name, value):
+		"""
+		Determine how to handle a setattr. Internal names are noops, scalars
+		scalars (including output busses) will be n_set, and everything else
+		results in an n_map.
+		"""
 		if name.startswith('_'):
 			return
 		if type(value) in (int, float):
@@ -94,12 +84,15 @@ class Synth(object):
 		elif name == 'o' and isinstance(value, KBus):
 			return ('set', value._id)
 		else:
+			# Assume we want to n_map a kr-param to a kr-synth's output
+			# This is a bit tricky since it could be a Synth or a KBus
 			while hasattr(value, 'o'): value = value.o
 			assert isinstance(value, KBus)
 			return ('map', value._id)
 
 	def __del__(self):
-		send('/n_free', self._id)
+		# Use sc reference in case it has already quit()
+		sc.send('/n_free', self._id)
 		nodePool.put(self._id)
 
 
@@ -115,11 +108,12 @@ class DecayEnv(object):
 
 class Instr(object):
 	def __init__(self):
+		import collections
 		self.voices = collections.deque()
 	def play(self, pitch):
 		now = time.time()
 		with bundle:
-			if not self.voices or now < self.voices[0]['time'] + 1.5:
+			if not self.voices or now < self.voices[0]['time'] + 1.1:
 				#print "creating a new voice"
 				decay = DecayEnv()
 				s = Synth('sine', amp=decay, freq=pitch)
@@ -139,12 +133,22 @@ def main():
 		time.sleep(0.2)
 
 if __name__ == '__main__':
-	scsynth.boot()
+	sc = scsynth.ScSynth()
+	sc.boot()
+	(send, bundle) = (sc.send, sc.bundled)
+	def sendBundledMsg(*args):
+		with bundle:
+			send(*args)
+
+	#scsynth.boot()
 	#send('/dumpOSC', 1); time.sleep(0.1)
 	default = Group(); time.sleep(0.1)
 	kbus0 = KBus()
 	try:
 		main()
+	except:
+		import traceback
+		traceback.print_exc()
 	finally:
-		scsynth.quit()
+		sc.quit()
 
