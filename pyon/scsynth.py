@@ -5,7 +5,6 @@ import struct
 import subprocess
 import sys
 import threading
-import time
 
 import osc
 
@@ -38,8 +37,14 @@ class ScSynth(object):
 		cmd = 'cd %s; ./scsynth -u %d -R 0' % (SCSYNTH_DIR, self.port)
 		self.proc = subprocess.Popen(['bash', '-c', cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) 
 		self.thread = threading.Thread(target=self.run)
+		self.thread.daemon = True
 		self.thread.start()
-		assert self.ctl.get() == 'boot'
+		try:
+			if self.ctl.get(block=True, timeout=5) != 'boot':
+				raise Exception("scsynth failed to boot")
+		except Queue.Empty:
+			self.proc.kill()
+			raise Exception("scsynth not ready after 5 seconds; aborting")
 
 	def run(self):
 		while True:
