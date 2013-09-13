@@ -22,17 +22,15 @@ class ScSynth(object):
 		self.bundle_depth = 0
 		self.bundle_msgs = []
 		class BundledContext(object):
-			@staticmethod
-			def __enter__():
+			def __enter__(_self):
 				self.bundle_depth += 1
-			@staticmethod
-			def __exit__(exc_type, exc_value, traceback):
+			def __exit__(_self, exc_type, exc_value, traceback):
 				self.bundle_depth -= 1
 				if self.bundle_depth == 0:
 					if exc_type is None:
 						self.sendBundle(*self.bundle_msgs)
 					self.bundle_msgs = []
-		self.bundled = BundledContext
+		self.bundled = BundledContext()
 
 	def boot(self):
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -48,7 +46,7 @@ class ScSynth(object):
 			line = self.proc.stdout.readline()
 			if not line: break
 			sys.stdout.write(line)
-			if line.startswith('SuperCollider 3 server ready..'):
+			if line.startswith('SuperCollider 3 server ready.'):
 				self.ctl.put('boot')
 		self.ctl.put('quit')
 
