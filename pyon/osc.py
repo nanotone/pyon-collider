@@ -1,3 +1,4 @@
+import StringIO
 import struct
 
 
@@ -49,6 +50,14 @@ def pack(cmd, *args):
 	typeTag = ',' + ''.join(oscTypes[type(x)] for x in args)
 	return ''.join(oscFormatters[type(x)](x) for x in [cmd, typeTag] + args)
 
+def packBundle(*msgs):
+	s = StringIO.StringIO()
+	s.write('#bundle\0\0\0\0\0\0\0\0\1')
+	for msg in msgs:
+		msg = pack(*msg)
+		s.write(struct.pack('!I', len(msg)))
+		s.write(msg)
+	return s.getvalue()
 
 def unpack(s):
 	(cmd, s) = shiftStr(s)
