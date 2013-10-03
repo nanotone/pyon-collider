@@ -37,6 +37,7 @@ def shiftBlob(s):
 oscShifters = {
 	'i': lambda s: (struct.unpack('!i', s[:4])[0], s[4:]),
 	'f': lambda s: (struct.unpack('!f', s[:4])[0], s[4:]),
+	'd': lambda s: (struct.unpack('!d', s[:8])[0], s[8:]),
 	's': shiftStr,
 	'b': shiftBlob,
 }
