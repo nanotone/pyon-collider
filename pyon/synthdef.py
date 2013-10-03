@@ -31,6 +31,7 @@ class SynthDef(object):
 	def __enter__(self):
 		assert SynthDef.ctx is None, "no reentrant SynthDefs"
 		SynthDef.ctx = self
+		return self
 
 	def __exit__(self, exc_type, value, traceback):
 		SynthDef.ctx = None
@@ -103,12 +104,11 @@ class UGen(object):
 
 
 def oscil(name, ugen, rate=ar):
-	oscil = SynthDef(name, 'freq', 'amp', 'o')
-	with oscil:
+	with SynthDef(name, 'freq', 'amp', 'o') as sd:
 		sin = UGen(ugen, rate, ['freq', 0], [rate])
 		amp = UGen('BinaryOpUGen', rate, [sin, 'amp'], [rate], 2)
 		UGen('Out', rate, ['o', amp], [])
-	return oscil.getData()
+		return sd.getData()
 
 def filewrap(data):
 	return struct.pack('!iih', 0x53436766, 1, 1) + data + '\x00\x00'
@@ -122,11 +122,10 @@ if __name__ == '__main__':
 	delta = filewrap(oscil('delta', 'Impulse', rate=kr))
 	assert hashlib.md5(delta).hexdigest() == '793f1d7e473e7553e6708ec914ebef6b'
 
-	decay = SynthDef('decay', 'i', 'attack', 'decay', 'o')
-	with decay:
+	with SynthDef('decay', 'i', 'attack', 'decay', 'o') as sd:
 		decay2 = UGen('Decay2', kr, ['i', 'attack', 'decay'], [kr])
 		UGen('Out', kr, ['o', decay2], [])
-	decay = filewrap(decay.getData())
+		decay = filewrap(sd.getData())
 	assert hashlib.md5(decay).hexdigest() == '5d39ee9df3a7bf7608e49ff350cd70a4'
 
 	print "all tests passed"
