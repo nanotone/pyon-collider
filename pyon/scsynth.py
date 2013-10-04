@@ -1,10 +1,10 @@
 import Queue
 import socket
-import StringIO
 import struct
 import subprocess
 import sys
 import threading
+import time
 
 import osc
 
@@ -17,7 +17,8 @@ class ScSynth(object):
 	def __init__(self, port=SCSYNTH_PORT):
 		self.port = port
 		self.sock = None
-		self.ctl = Queue.Queue(1)
+		self.booted = False
+
 		self.bundle_depth = 0
 		self.bundle_msgs = []
 		class BundledContext(object):
@@ -33,47 +34,38 @@ class ScSynth(object):
 
 	def boot(self):
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		self.sock.connect(('127.0.0.1', self.port))
 		cmd = 'cd %s; ./scsynth -u %d -R 0' % (SCSYNTH_DIR, self.port)
-		self.proc = subprocess.Popen(['bash', '-c', cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT) 
-		self.thread = threading.Thread(target=self.run)
-		self.thread.daemon = True
-		self.thread.start()
-		try:
-			if self.ctl.get(block=True, timeout=5) != 'boot':
-				raise Exception("scsynth failed to boot")
-		except Queue.Empty:
-			self.proc.kill()
-			raise Exception("scsynth not ready after 5 seconds; aborting")
+		self.proc = subprocess.Popen(['bash', '-c', cmd])
+		self.recv_thread = threading.Thread(target=self.run_recv)
+		self.recv_thread.daemon = True
+		self.recv_thread.start()
 
-	def run(self):
+		start = time.time()
+		while not self.booted:
+			if time.time() - start > 5:
+				raise Exception("scsynth not ready after 5 seconds; aborting")
+			self.send('/status')
+			time.sleep(0.5)  # clunky
+
+	def run_recv(self):
 		while True:
-			line = self.proc.stdout.readline()
-			if not line: break
-			sys.stdout.write(line)
-			if line.startswith('SuperCollider 3 server ready.'):
-				self.ctl.put('boot')
-		self.ctl.put('quit')
+			msg = self.sock.recv(1024)
+			msg = osc.unpack(msg)
+			if msg[0] == '/status.reply':
+				self.booted = True
 
 	def quit(self):
 		self.send('/quit')
 		self.send = self.sendBundle = (lambda *args: None)
-		assert self.ctl.get() == 'quit'
 
 	def send(self, *args):
 		assert None not in args, "Cannot send " + repr(args)
 		if self.bundle_depth:
 			self.bundle_msgs.append(args)
 		else:
-			self.sock.send(osc.pack(*args))
+			self.sock.sendto(osc.pack(*args), ('127.0.0.1', self.port))
 		print "Sent", repr(args)
 
 	def sendBundle(self, *msgs):
-		s = StringIO.StringIO()
-		s.write('#bundle\0\0\0\0\0\0\0\0\1')
-		for msg in msgs:
-			msg = osc.pack(*msg)
-			s.write(struct.pack('!I', len(msg)))
-			s.write(msg)
-		self.sock.send(s.getvalue())
-		print "Sent %s" % repr((1, msgs))
+		self.sock.send(osc.packBundle(*msgs))
+		print "Sent bundle", repr((1, msgs))
