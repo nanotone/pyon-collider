@@ -53,6 +53,7 @@ class ScSynth(object):
 			msg = osc.unpack(msg)
 			if msg[0] == '/status.reply':
 				self.booted = True
+			print "Received", msg
 
 	def quit(self):
 		self.send('/quit')
@@ -64,8 +65,8 @@ class ScSynth(object):
 			self.bundle_msgs.append(args)
 		else:
 			self.sock.sendto(osc.pack(*args), ('127.0.0.1', self.port))
-		print "Sent", repr(args)
+			print "Sent", args
 
 	def sendBundle(self, *msgs):
-		self.sock.send(osc.packBundle(*msgs))
-		print "Sent bundle", repr((1, msgs))
+		self.sock.sendto(osc.packBundle(*msgs), ('127.0.0.1', self.port))
+		print "Sent bundle", msgs
