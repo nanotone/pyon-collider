@@ -6,9 +6,12 @@ import struct
 
 defaults = {'amp': 1, 'attack': 0.001, 'decay': 1, 'freq': 440, 'i': 0, 'o': 0}
 
-CONST = -1
 
 def make_packer():
+	"""
+	Return a tuple (io, data, pstr) where io is a StringIO, and data and pstr
+	are lambdas that write packed data and Pascal strs, respectively, into io.
+	"""
 	io = StringIO.StringIO()
 	data = lambda fmt, value: io.write(struct.pack('!' + fmt, value))
 	pstr = lambda s: io.write(struct.pack('!B', len(s)) + s)
@@ -37,9 +40,13 @@ class SynthDef(object):
 		SynthDef.ctx = None
 
 	def getInputByArg(self, arg):
-		return {'ugen': self.control.id, 'idx': self.argNames.index(arg)}
+		return self.control[self.argNames.index(arg)]
 
-	def getData(self):
+	def data(self):
+		"""
+		Return the SynthDef's contents in SC's binary-packed synthdef format.
+		Incidentally, this is pretty decent self-documentation for the format.
+		"""
 		(io, data, pstr) = make_packer()
 		pstr(self.name)
 		data('h', len(self.consts))
@@ -57,50 +64,56 @@ class SynthDef(object):
 			pstr(u.name)
 			data('b', u.rate)
 			data('h', len(u.inputs))
-			data('h', len(u.output_rates))
+			data('h', len(u.outputs))
 			data('h', u.special)
 			for ispec in u.inputs:
-				data('h', ispec['ugen'])
-				data('h', ispec['idx'])
-			for orate in u.output_rates: data('b', orate)
-
-		self.data = io.getvalue()
-		return self.data
+				if type(ispec) is tuple:  # (UGen, output_idx)
+					data('h', ispec[0].id)
+					data('h', ispec[1])
+				else:  # const_idx
+					data('h', -1)
+					data('h', ispec)
+			for orate in u.outputs: data('b', orate)
+		return io.getvalue()
 
 	def register_const(self, value):
+		"""Return a const index for the given int or float"""
 		try:
-			return {'ugen': CONST, 'idx': self.consts.index(value)}
+			return self.consts.index(value)
 		except ValueError:
 			self.consts.append(value)
-			return {'ugen': CONST, 'idx': len(self.consts) - 1}
+			return len(self.consts) - 1
+
+	def file_data(self):
+		"""Return the SynthDef's contents in synthdef file format."""
+		return struct.pack('!iih', 0x53436766, 1, 1) + self.data() + '\x00\x00'
+
 
 def Param(name, init):
 	SynthDef.ctx.params.append((name, init))
 
 class UGen(object):
-	def __init__(self, name, rate, inputs, output_rates, special=0):
+	def __init__(self, name, rate, inputs, outputs, special=0):
 		self.name = name
 		self.rate = rate
-		# each item in inputs must be a UGen, or UGen.output()'s, or arg name, or const
-		self.inputs = map(self.make_input_spec, inputs)
-		self.output_rates = output_rates
 		self.special = special
+		self.inputs = map(self.process_input, inputs)
+		self.outputs = outputs
 		self.id = len(SynthDef.ctx.ugens)
 		SynthDef.ctx.ugens.append(self)
+		if name == 'Out' and inputs[0] == 'o':
+			SynthDef.ctx.output_rate = rate
 
-	def output(self, idx=0):
-		return {'ugen': self.id, 'idx': idx}
+	def __getitem__(self, key):
+		assert type(key) is int
+		return (self, key)
 
-	def make_input_spec(self, i):
-		"""Return a {'ugen': UGEN_ID_OR_CONST, 'idx': INDEX} input spec"""
-		if isinstance(i, UGen):
-			return i.output()
-		if isinstance(i, dict):
-			return i
-		if isinstance(i, str):
-			return SynthDef.ctx.getInputByArg(i)
-		assert type(i) in (int, float)
-		return SynthDef.ctx.register_const(i)
+	def process_input(self, input):
+		if type(input) is tuple: return input
+		if type(input) is UGen: return input[0]
+		if type(input) is str: return SynthDef.ctx.getInputByArg(input)
+		assert type(input) in (int, float)
+		return SynthDef.ctx.register_const(input)
 
 
 def oscil(name, ugen, rate=ar):
@@ -108,24 +121,21 @@ def oscil(name, ugen, rate=ar):
 		sin = UGen(ugen, rate, ['freq', 0], [rate])
 		amp = UGen('BinaryOpUGen', rate, [sin, 'amp'], [rate], 2)
 		UGen('Out', rate, ['o', amp], [])
-		return sd.getData()
-
-def filewrap(data):
-	return struct.pack('!iih', 0x53436766, 1, 1) + data + '\x00\x00'
+	return sd
 
 
 if __name__ == '__main__':
 	import hashlib, sys
-	sine = filewrap(oscil('sine', 'SinOsc', rate=ar))
+	sine = oscil('sine', 'SinOsc', rate=ar).file_data()
 	assert hashlib.md5(sine).hexdigest() == 'b7afb632d9cdbf5475cadb6a23ca27dd'
 
-	delta = filewrap(oscil('delta', 'Impulse', rate=kr))
+	delta = oscil('delta', 'Impulse', rate=kr).file_data()
 	assert hashlib.md5(delta).hexdigest() == '793f1d7e473e7553e6708ec914ebef6b'
 
 	with SynthDef('decay', 'i', 'attack', 'decay', 'o') as sd:
 		decay2 = UGen('Decay2', kr, ['i', 'attack', 'decay'], [kr])
 		UGen('Out', kr, ['o', decay2], [])
-		decay = filewrap(sd.getData())
+	decay = sd.file_data()
 	assert hashlib.md5(decay).hexdigest() == '5d39ee9df3a7bf7608e49ff350cd70a4'
 
 	print "all tests passed"

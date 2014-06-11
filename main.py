@@ -1,22 +1,10 @@
 import itertools
 import time
 
-from pyon import pool, synthdef, scsynth
+from pyon import pool, scsynth
+import synthdefs
 
-
-# signal rates for each synthdef
-synthSpec = {
-	'decay': 1,
-	'delta': 1,
-	'sine': 2,
-}
-
-def make_oscil(name, ugen, rate=2):
-	send('/d_recv', synthdef.filewrap(synthdef.oscil(name, ugen, rate)))
-#make_oscil('sin', 'SinOsc')
-#make_oscil('saw', 'Saw')
-#make_oscil('ksin', 'SinOsc', 1)
-#make_oscil('delta', 'Impulse', rate=1)
+output_rates = {}
 
 nodePool = pool.Pool()
 kbusPool = pool.Pool(0)
@@ -39,16 +27,16 @@ class KBus(object):
 
 
 class Synth(object):
-	def __init__(self, synthdef, parent=None, **kwargs):
+	def __init__(self, synthdefName, parent=None, **kwargs):
 		if not parent: parent = default
 		self._id = nodePool.get()
-		if synthSpec.get(synthdef) == 1: # control bus output
+		if output_rates.get(synthdefName) == 1: # control bus output
 			self._obus = KBus()
 			if 'o' not in kwargs:
 				kwargs['o'] = self._obus
 		with bundle:
 			# setattr ALL the kwargs! But combine the sets and maps for efficiency
-			snew = ['/s_new', synthdef, self._id, 0, parent._id]
+			snew = ['/s_new', synthdefName, self._id, 0, parent._id]
 			mapping = {}
 			for (name, value) in kwargs.iteritems():
 				object.__setattr__(self, name, value)
@@ -87,7 +75,7 @@ class Synth(object):
 			# Assume we want to n_map a kr-param to a kr-synth's output
 			# This is a bit tricky since it could be a Synth or a KBus
 			while hasattr(value, 'o'): value = value.o
-			assert isinstance(value, KBus)
+			assert isinstance(value, KBus), "%r is not a KBus!" % value
 			return ('map', value._id)
 
 	def __del__(self):
@@ -103,7 +91,6 @@ class DecayEnv(object):
 		thing = self.decay.i
 		with bundle:
 			self.decay.i = Synth('delta', freq=0)
-
 
 
 class Instr(object):
@@ -140,6 +127,10 @@ if __name__ == '__main__':
 		with bundle:
 			send(*args)
 
+	for sd in synthdefs.gen_synthdefs():
+		send('/d_recv', sd.file_data())
+		if getattr(sd, 'output_rate', None) is not None:
+			output_rates[sd.name] = sd.output_rate
 	#scsynth.boot()
 	#send('/dumpOSC', 1); time.sleep(0.1)
 	default = Group(); time.sleep(0.1)
