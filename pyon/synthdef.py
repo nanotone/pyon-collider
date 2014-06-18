@@ -93,12 +93,12 @@ def Param(name, init):
 	SynthDef.ctx.params.append((name, init))
 
 class UGen(object):
-	def __init__(self, name, rate, inputs, outputs, special=0):
+	def __init__(self, name, rate, inputs, outputs=None, special=0):
 		self.name = name
 		self.rate = rate
 		self.special = special
 		self.inputs = map(self.process_input, inputs)
-		self.outputs = outputs
+		self.outputs = outputs or ()
 		self.id = len(SynthDef.ctx.ugens)
 		SynthDef.ctx.ugens.append(self)
 		if name == 'Out' and inputs[0] == 'o':
@@ -119,8 +119,8 @@ class UGen(object):
 def oscil(name, ugen, rate=ar):
 	with SynthDef(name, 'freq', 'amp', 'o') as sd:
 		sin = UGen(ugen, rate, ['freq', 0], [rate])
-		amp = UGen('BinaryOpUGen', rate, [sin, 'amp'], [rate], 2)
-		UGen('Out', rate, ['o', amp], [])
+		op = UGen('BinaryOpUGen', rate, [sin, 'amp'], [rate], 2)
+		UGen('Out', rate, ['o', op])
 	return sd
 
 
