@@ -46,6 +46,7 @@ class ScSynth(object):
 				raise Exception("scsynth not ready after 5 seconds; aborting")
 			self.send('/status')
 			time.sleep(0.5)  # clunky
+		self.pending_recvs = 0
 
 	def run_recv(self):
 		while True:
@@ -53,7 +54,12 @@ class ScSynth(object):
 			msg = osc.unpack(msg)
 			if msg[0] == '/status.reply':
 				self.booted = True
-			print "Received", msg
+			if msg == ['/done', ',s', '/d_recv']:
+				self.pending_recvs -= 1
+				if not self.pending_recvs:
+					print "All synthdefs loaded"
+			else:
+				print "Received", msg
 
 	def quit(self):
 		self.send('/quit')
@@ -66,6 +72,8 @@ class ScSynth(object):
 		else:
 			self.sock.sendto(osc.pack(*args), ('127.0.0.1', self.port))
 			print "Sent", args
+			if args[0] == '/d_recv':
+				self.pending_recvs += 1
 
 	def sendBundle(self, *msgs):
 		self.sock.sendto(osc.packBundle(*msgs), ('127.0.0.1', self.port))
