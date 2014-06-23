@@ -76,5 +76,6 @@ class ScSynth(object):
 				self.pending_recvs += 1
 
 	def sendBundle(self, *msgs):
-		self.sock.sendto(osc.packBundle(*msgs), ('127.0.0.1', self.port))
-		print "Sent bundle", msgs
+		if msgs:
+			self.sock.sendto(osc.packBundle(*msgs), ('127.0.0.1', self.port))
+			print "Sent bundle", msgs
