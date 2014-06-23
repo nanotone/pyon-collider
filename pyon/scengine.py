@@ -9,9 +9,11 @@ output_rates = {}
 
 
 class Group(object):
-	def __init__(self, engine):
+	def __init__(self, engine, parent=None):
 		self._id = engine.node_pool.get()
-		engine.send('/g_new', self._id, 0, 0)
+		if parent is None:
+			parent = engine.default._id
+		engine.send('/g_new', self._id, 1, parent)
 
 
 class KBus(object):
@@ -79,10 +81,15 @@ class Synth(object):
 			assert isinstance(value, KBus), "%r is not a KBus!" % value
 			return ('map', value._id)
 
+	def free(self):
+		if self._engine:
+			# Use _engine.sc reference in case it has already quit()
+			self._engine.sc.send('/n_free', self._id)
+			self._engine.node_pool.put(self._id)
+			self._engine = None
+
 	def __del__(self):
-		# Use sc reference in case it has already quit()
-		self._engine.sc.send('/n_free', self._id)
-		self._engine.node_pool.put(self._id)
+		self.free()
 
 
 class ScEngine(object):
@@ -95,9 +102,16 @@ class ScEngine(object):
 
 		self.send = self.sc.send
 		self.bundle = self.sc.bundled
-		self.default = Group(self)
+		self.default = Group(self, parent=0)
 		time.sleep(0.1)
 		self.kb0 = KBus(self)
+		self.kb0.set(0)
+
+		synthdef.SynthDef.engine = self
+		self.synthdefs = {}
+
+	def group(self, parent=None):
+		return Group(self, (parent or self.default)._id)
 
 	def kbus(self, value=None):
 		kb = KBus(self)
