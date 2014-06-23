@@ -30,9 +30,8 @@ class Synth(object):
 		self._engine = engine
 		self._id = engine.node_pool.get()
 		if output_rates.get(sd_name) == 1: # control bus output
-			self._obus = engine.kbus()
-			if 'o' not in kwargs:
-				kwargs['o'] = self._obus
+			if 'out' not in kwargs:
+				kwargs['out'] = engine.kbus()
 		with engine.bundle:
 			# setattr ALL the kwargs! But combine the sets and maps for efficiency
 			snew = ['/s_new', sd_name, self._id, 0, parent._id]
@@ -69,12 +68,12 @@ class Synth(object):
 			return
 		if type(value) in (int, float):
 			return ('set', value)
-		elif name == 'o' and isinstance(value, KBus):
+		elif name == 'out' and isinstance(value, KBus):
 			return ('set', value._id)
 		else:
 			# Assume we want to n_map a kr-param to a kr-synth's output
 			# This is a bit tricky since it could be a Synth or a KBus
-			while hasattr(value, 'o'): value = value.o
+			while hasattr(value, 'out'): value = value.out
 			assert isinstance(value, KBus), "%r is not a KBus!" % value
 			return ('map', value._id)
 
