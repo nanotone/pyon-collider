@@ -116,6 +116,31 @@ class UGen(object):
 		assert type(key) is int
 		return (self, key)
 
+	def __add__(self, other):
+		# see if we can upgrade a mulOp BinaryOpUGen to a MulAdd
+		if self.name == 'BinaryOpUGen' and self.special == 2:
+			self.name = 'MulAdd'
+			self.rate = max(self.rate, other.rate if isinstance(other, UGen) else kr)
+			self.inputs.append(self.process_input(other))
+			self.outputs = [self.rate]
+			self.special = 0
+			SynthDef.ctx.ugens.remove(self)
+			SynthDef.ctx.ugens.append(self)  # move MulAdd to end
+			return self
+		return UGen('BinaryOpUGen', self, other, special=0)
+	def __radd__(self, other):
+		return UGen('BinaryOpUGen', other, self, special=0)
+
+	def __sub__(self, other):
+		return UGen('BinaryOpUGen', self, other, special=1)
+	def __rsub__(self, other):
+		return UGen('BinaryOpUGen', other, self, special=1)
+
+	def __mul__(self, other):
+		return UGen('BinaryOpUGen', self, other, special=2)
+	def __rmul__(self, other):
+		return UGen('BinaryOpUGen', other, self, special=2)
+
 	def process_input(self, input):
 		if type(input) is tuple: return input
 		if type(input) is UGen: return input[0]

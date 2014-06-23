@@ -19,7 +19,8 @@ class KBus(object):
 		self._id = engine.kbus_pool.get()
 
 	def set(self, value):
-		self.engine.send_bundled_msg('/c_set', self._id, value)
+		with self.engine.bundle:
+			self.engine.send('/c_set', self._id, value)
 
 	def __del__(self):
 		self.engine.kbus_pool.put(self._id)
@@ -103,15 +104,21 @@ class ScEngine(object):
 			kb.set(value)
 		return kb
 
-	def synth(self, sd_name, parent=None, **kwargs):
+	def synth(self, sd, parent=None, **kwargs):
 		if not parent:
 			parent = self.default
-		return Synth(self, sd_name, parent, **kwargs)
+		if isinstance(sd, synthdef.SynthDef):
+			sd = sd.name
+		amp = kwargs.get('amp')
+		if isinstance(amp, int) and amp < 0:
+			kwargs['amp'] = 10 ** (0.05 * amp)
+		return Synth(self, sd, parent, **kwargs)
 
 	def send_synthdef(self, synthdef):
 		self.sc.send('/d_recv', synthdef.file_data())
 		if getattr(synthdef, 'output_rate', None) is not None:
 			output_rates[synthdef.name] = synthdef.output_rate
+		self.synthdefs[synthdef.name] = synthdef
 
 	def shutdown(self):
 		self.sc.quit()
