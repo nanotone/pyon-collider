@@ -40,6 +40,9 @@ class SynthDef(object):
 	def __exit__(self, exc_type, value, traceback):
 		SynthDef.ctx = None
 
+	def __call__(self, **kwargs):
+		return SynthDef.engine.synth(self, **kwargs)
+
 	def getInputByArg(self, arg):
 		return self.control[self.argNames.index(arg)]
 
