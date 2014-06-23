@@ -29,7 +29,8 @@ class SynthDef(object):
 		with self:
 			for x in argNames:
 				Param(x, defaults[x])
-			self.control = UGen('Control', kr, [], [kr] * len(argNames))
+			if argNames:
+				self.control = UGen('Control', rate=kr, outputs=[kr] * len(argNames))
 
 	def __enter__(self):
 		assert SynthDef.ctx is None, "no reentrant SynthDefs"
