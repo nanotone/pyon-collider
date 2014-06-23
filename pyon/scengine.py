@@ -3,6 +3,7 @@ import time
 
 import pool
 import scsynth
+import synthdef
 
 output_rates = {}
 
