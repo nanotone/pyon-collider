@@ -28,7 +28,7 @@ class SynthDef(object):
 		self.argNames = argNames
 		with self:
 			for x in argNames:
-				Param(x, defaults[x])
+				Param(x, defaults.get(x, 0))
 			if argNames:
 				self.control = UGen('Control', rate=kr, outputs=[kr] * len(argNames))
 
@@ -153,12 +153,21 @@ class UGen(object):
 
 class UGenSugar(object):
 	defaults = {
-		'LPF': (0, 440),
-		'Line': (0, 1, 1, 0),
+		# basic
 		'MulAdd': (None, 1, 0),
-		'SinOsc': (440, 0),
-		'WhiteNoise': (),
+		# filters
+		'BPF': (0, 440, 1),
+		'HPF': (0, 440),
+		'LPF': (0, 440),
+		# line
+		'Line': (0, 1, 1, 0),
 		'XLine': (1, 2, 1, 0),
+		# noise
+		'WhiteNoise': (),
+		# osc
+		'Pulse': (440, 0.5),
+		'Saw': (440,),
+		'SinOsc': (440, 0),
 	}
 	def __init__(self, rate):
 		self.rate = rate
